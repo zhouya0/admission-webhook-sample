@@ -1,0 +1,124 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: admission-webhook-example-cr
+  labels:
+    app: admission-webhook-example
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - events
+    verbs:
+      - "*"
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+      - daemonsets
+      - replicasets
+      - statefulsets
+    verbs:
+      - "*"
+  - apiGroups:
+      - autoscaling
+    resources:
+      - '*'
+    verbs:
+      - '*'
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: admission-webhook-example-crb
+  labels:
+    app: admission-webhook-example
+subjects:
+  - kind: ServiceAccount
+    name: admission-webhook-example-sa
+    namespace: pipeline-infra
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: admission-webhook-example-cr
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admission-webhook-example-deployment
+  labels:
+    app: admission-webhook-example
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: admission-webhook-example
+  template:
+    metadata:
+      labels:
+        app: admission-webhook-example
+    spec:
+      containers:
+        - name: admission-webhook-example
+          image: yaopolytech/admission-webhook-example:v0.1.0
+          imagePullPolicy: Always
+          args:
+            - -tlsCertFile=/etc/webhook/certs/cert.pem
+            - -tlsKeyFile=/etc/webhook/certs/key.pem
+            - -alsologtostderr
+            - -v=4
+            - 2>&1
+          volumeMounts:
+            - name: webhook-certs
+              mountPath: /etc/webhook/certs
+              readOnly: true
+      volumes:
+        - name: webhook-certs
+          secret:
+            secretName: admission-webhook-example-certs
+---
+
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: mutating-webhook-example-cfg
+  labels:
+    app: admission-webhook-example
+webhooks:
+  - name: mutating-example.banzaicloud.com
+    clientConfig:
+      service:
+        name: admission-webhook-example-svc
+        namespace: default
+        path: "/mutate"
+      caBundle: ${CA_BUNDLE}
+    rules:
+      - operations: [ "CREATE" ]
+        apiGroups: [""]
+        apiVersions: ["v1"]
+        resources: ["pods"]
+#    namespaceSelector:
+#      matchLabels:
+#        admission-webhook-example: enabled
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: admission-webhook-example-sa
+  labels:
+    app: admission-webhook-example
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: admission-webhook-example-svc
+  labels:
+    app: admission-webhook-example
+spec:
+  ports:
+    - port: 443
+      targetPort: 443
+  selector:
+    app: admission-webhook-example
+---

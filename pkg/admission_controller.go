@@ -33,6 +33,14 @@ var (
 	deserializer = serializer.NewCodecFactory(runtimeScheme).UniversalDeserializer()
 )
 
+// Web hook server parameters
+type WhSvrParameters struct {
+	Port int // webhook server port
+	CertFile string // path to the x509 certificates for https
+	KeyFile string // path to the x509 private key matching `CertFile`
+	SidecarCfgFile string // path to sidecar injector configuration file
+}
+
 type patchOperation struct {
 	Op string `json:"op"`
 	Path string `json:"path"`
@@ -46,7 +54,7 @@ func init() {
 }
 
 type WebhookServer struct {
-	server *http.Server
+	Server *http.Server
 }
 
 func requiredMutation(pod *corev1.Pod) bool {
@@ -85,8 +93,6 @@ func (whsvr *WebhookServer) mutate(ar *v1beta1.AdmissionReview) *v1beta1.Admissi
 				Allowed: true,
 			}
 		}
-		oldPri := pod.Spec.PriorityClassName
-
 	} else {
 		return &v1beta1.AdmissionResponse{
 			Allowed: true,
@@ -95,7 +101,7 @@ func (whsvr *WebhookServer) mutate(ar *v1beta1.AdmissionReview) *v1beta1.Admissi
 }
 
 // Serve method for web hook server
-func (whsvr *WebhookServer) serve(w http.ResponseWriter, r *http.Request) {
+func (whsvr *WebhookServer) Serve(w http.ResponseWriter, r *http.Request) {
 	var body []byte
 	if r.Body != nil {
 		if data, err := ioutil.ReadAll(r.Body); err == nil {
